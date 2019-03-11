@@ -4,8 +4,6 @@
  */
 package myrts;
 
-import java.util.*;  
-import java.math.*;
 import ai.abstraction.AbstractAction;
 import ai.abstraction.AbstractionLayerAI;
 import ai.abstraction.Harvest;
@@ -25,131 +23,201 @@ import rts.units.Unit;
 import rts.units.UnitType;
 import rts.units.UnitTypeTable;
 
+
 public class Myrts extends AbstractionLayerAI {
 
-    UnitTypeTable m_utt = null;
-    
-    
-    Unit my_base = null;
-    Unit enermy_base = null;
+    Random r = new Random();
+    protected UnitTypeTable utt;
+    UnitType workerType;
+    UnitType baseType;
+    UnitType barracks;
+    boolean resourse = true;
 
-    public Myrts(UnitTypeTable utt, PathFinding a_pf) {
-        super(a_pf);
-        m_utt = utt;
-    }
+    // Strategy implemented by this class:
+    // If we have more than 1 "Worker": send the extra workers to attack to the nearest enemy unit
+    //attack base and barracks first
+    // If we have a base: train workers non-stop
+    // If we have a worker: do this if needed: build base, harvest resources
     public Myrts(UnitTypeTable a_utt) {
         this(a_utt, new AStarPathFinding());
     }
-    
-    public AI clone() {
-        return new Myrts(m_utt, pf);
+
+    public Myrts(UnitTypeTable a_utt, PathFinding a_pf) {
+        super(a_pf);
+        reset(a_utt);
     }
-// This will be called once at the beginning of each new game:
 
     public void reset() {
+        super.reset();
     }
-// Called by microRTS at each game cycle.
-// Returns the action the bot wants to execute.
+
+    public void reset(UnitTypeTable a_utt) {
+        utt = a_utt;
+        if (utt != null) {
+            workerType = utt.getUnitType("Worker");
+            baseType = utt.getUnitType("Base");
+            barracks = utt.getUnitType("Barracks");
+        }
+    }
+
+    public AI clone() {
+        return new Myrts(utt, pf);
+    }
 
     public PlayerAction getAction(int player, GameState gs) {
-        PlayerAction pa = new PlayerAction();
         PhysicalGameState pgs = gs.getPhysicalGameState();
         Player p = gs.getPlayer(player);
-        List<Unit> HarvestWorkers = new ArrayList<>();
-        List<Unit> resources = new ArrayList<>();
-//获取我方和敌方初始基地，二人游戏
+        PlayerAction pa = new PlayerAction();
+//        System.out.println("LightRushAI for player " + player + " (cycle " + gs.getTime() + ")");
+
+        // behavior of bases:
         for (Unit u : pgs.getUnits()) {
-            if (u.getType() == m_utt.getUnitType("Base")) {
-                if (u.getPlayer() == player) {
-                    my_base = u;
-                } else if (u.getPlayer() != player) {
-                    enermy_base = u;
-                }
-            }
-        }
-//获取资源数
-        for (Unit u : pgs.getUnits()) {
-            if (u.getType() == m_utt.getUnitType("Resource")) {
-                resources.add(u);
-            }
-        }
-        System.out.println("原资源数:"+resources.size());
-//挑选离我方基地近的资源作为开采点
-        for (int j = 0; j < resources.size(); ++j) {
-            if (Math.abs(resources.get(j).getX() - my_base.getX())
-                    + Math.abs(resources.get(j).getY() - my_base.getY())
-                    > Math.abs(resources.get(j).getX() - enermy_base.getX())
-                    + Math.abs(resources.get(j).getY() - enermy_base.getY())) {
-                resources.remove(j);
-            }
-        }
-        System.out.println("之后的原资源数:"+resources.size());
-//挑选后勤勤和先锋
-        List<Unit> offendWorker = new ArrayList<>();
-        int harvestWorkerFind = 0;
-        if (resources.size() != 0) {           
-            for (Unit u : pgs.getUnits()) {
-                if (u.getType() == m_utt.getUnitType("Worker")
-                        && u.getPlayer() == player) {
-                    if (harvestWorkerFind < 1) {
-                        HarvestWorkers.add(u);
-                        harvestWorkerFind++;
-                    } else {
-                        offendWorker.add(u);
-                    }
-                }
-            }
-        }
-        else{
-            for (Unit u : pgs.getUnits()) {
-                if (u.getType() == m_utt.getUnitType("Worker")
-                        && u.getPlayer() == player) {
-                    if (harvestWorkerFind < 2) {
-                        HarvestWorkers.add(u);
-                        harvestWorkerFind++;
-                    } else {
-                        offendWorker.add(u);
-                    }
-                }
+            if (u.getType() == baseType
+                    && u.getPlayer() == player
+                    && gs.getActionAssignment(u) == null) {
+                baseBehavior(u, p, pgs);
             }
         }
 
-        
-        if (gs.getActionAssignment(my_base) == null && p.getResources()
-                > m_utt.getUnitType("Worker").cost) {
-            train(my_base, m_utt.getUnitType("Worker"));
-        }
-//收获资源
-        for (int j = 0; j < Math.min(resources.size(), HarvestWorkers.size());
-                ++j) {
-            if (gs.getActionAssignment(HarvestWorkers.get(j)) == null) {
-                harvest(HarvestWorkers.get(j), resources.get(j),my_base);
-            }
-        }
-//没有灵魂地进攻
-        List<Unit> enermyUnits = new ArrayList<>();
+        // behavior of melee units:
         for (Unit u : pgs.getUnits()) {
-            if (u.getPlayer() != player && u.getPlayer() >= 0) {
-                enermyUnits.add(u);
+            if (u.getType().canAttack && !u.getType().canHarvest
+                    && u.getPlayer() == player
+                    && gs.getActionAssignment(u) == null) {
+                meleeUnitBehavior(u, p, gs);
             }
         }
-        Integer s = new Random().nextInt(enermyUnits.size());
-        for (Unit warrior : offendWorker) {
-            if (gs.getActionAssignment(warrior) == null
-                    && warrior.getType().canAttack) {
-                Unit target = enermyUnits.get(s);
-                if (target == null) {
-                    break;
-                } else {
-                    attack(warrior, target);
-                }
+
+        // behavior of workers:
+        List<Unit> workers = new LinkedList<Unit>();
+        for (Unit u : pgs.getUnits()) {
+            if (u.getType().canHarvest
+                    && u.getPlayer() == player) {
+                workers.add(u);
             }
         }
-//抽具化
+        workersBehavior(workers, p, gs);
+
         return translateActions(player, gs);
     }
 
+    public void baseBehavior(Unit u, Player p, PhysicalGameState pgs) {
+        if (p.getResources() >= workerType.cost) {
+            train(u, workerType);
+        }
+    }
+
+    public void meleeUnitBehavior(Unit u, Player p, GameState gs) {
+        PhysicalGameState pgs = gs.getPhysicalGameState();
+        Unit closestEnemy = null;
+        Unit closestMeleeEnemy = null;
+        int closestDistance = 0;
+        int enemyDistance = 0;
+        int mybase = 0;
+        for (Unit u2 : pgs.getUnits()) {
+            if (u2.getPlayer() >= 0 && u2.getPlayer() != p.getID()) {
+                int d = Math.abs(u2.getX() - u.getX()) + Math.abs(u2.getY() - u.getY());
+                if (closestEnemy == null || d < closestDistance) {
+                    closestEnemy = u2;
+                    closestDistance = d;
+                }
+            } else if (u2.getPlayer() == p.getID() && u2.getType() == baseType) {
+                mybase = Math.abs(u2.getX() - u.getX()) + Math.abs(u2.getY() - u.getY());
+            }
+        }
+        if (closestEnemy != null) {
+            attack(u, closestEnemy);
+        } else {
+            attack(u, null);
+        }
+
+    }
+
+    public void workersBehavior(List<Unit> workers, Player p, GameState gs) {
+        PhysicalGameState pgs = gs.getPhysicalGameState();
+        int nbases = 0;
+        int resourcesUsed = 0;
+        Unit harvestWorker = null;
+        List<Unit> freeWorkers = new LinkedList<Unit>();
+        freeWorkers.addAll(workers);
+
+        if (workers.isEmpty()) {
+            return;
+        }
+
+        for (Unit u2 : pgs.getUnits()) {
+            if (u2.getType() == baseType
+                    && u2.getPlayer() == p.getID()) {
+                nbases++;
+            }
+        }
+
+        List<Integer> reservedPositions = new LinkedList<Integer>();
+        if (nbases == 0 && !freeWorkers.isEmpty() && resourse) {
+            // build a base:
+            if (p.getResources() >= baseType.cost + resourcesUsed) {
+                Unit u = freeWorkers.remove(0);
+                buildIfNotAlreadyBuilding(u, baseType, u.getX(), u.getY(), reservedPositions, p, pgs);
+                resourcesUsed += baseType.cost;
+            }
+        }
+
+        if (freeWorkers.size() > 0 && resourse) {
+            harvestWorker = freeWorkers.remove(0);
+        }
+        // harvest with the harvest worker:
+        if (harvestWorker != null) {
+            Unit closestBase = null;
+            Unit closestResource = null;
+            int closestDistance = 0;
+            for (Unit u2 : pgs.getUnits()) {
+                if (u2.getType().isResource) {
+                    int d = Math.abs(u2.getX() - harvestWorker.getX()) + Math.abs(u2.getY() - harvestWorker.getY());
+                    if (closestResource == null || d < closestDistance) {
+                        closestResource = u2;
+                        closestDistance = d;
+                    }
+                }
+            }
+            closestDistance = 0;
+            for (Unit u2 : pgs.getUnits()) {
+                if (u2.getType().isStockpile && u2.getPlayer() == p.getID()) {
+                    int d = Math.abs(u2.getX() - harvestWorker.getX()) + Math.abs(u2.getY() - harvestWorker.getY());
+                    if (closestBase == null || d < closestDistance) {
+                        closestBase = u2;
+                        closestDistance = d;
+                    }
+                }
+            }
+            if (closestResource != null && closestBase != null) {
+                AbstractAction aa = getAbstractAction(harvestWorker);
+                if (aa instanceof Harvest) {
+                    Harvest h_aa = (Harvest) aa;
+                    if (h_aa.getTarget() != closestResource || h_aa.getBase() != closestBase) {
+                        harvest(harvestWorker, closestResource, closestBase);
+                    } else {
+                    }
+                } else {
+                    harvest(harvestWorker, closestResource, closestBase);
+                }
+            } else if ((closestResource == null) && (p.getResources() == 0) && (freeWorkers.isEmpty())) {
+
+                freeWorkers.add(harvestWorker);
+                resourse = false;
+            }
+        }
+        for (Unit u : freeWorkers) {
+            meleeUnitBehavior(u, p, gs);
+        }
+
+    }
+
+    @Override
     public List<ParameterSpecification> getParameters() {
-        return new ArrayList<>();
+        List<ParameterSpecification> parameters = new ArrayList<>();
+
+        parameters.add(new ParameterSpecification("PathFinding", PathFinding.class, new AStarPathFinding()));
+
+        return parameters;
     }
 }
