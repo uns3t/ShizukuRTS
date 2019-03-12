@@ -78,8 +78,9 @@ public class Myrts extends AbstractionLayerAI {
                 baseBehavior(u, p, pgs);
             }
         }
-
+        System.out.println("test1");
         // behavior of melee units:
+        //可攻击但不可采集资源，在整个比赛中不存在
         for (Unit u : pgs.getUnits()) {
             if (u.getType().canAttack && !u.getType().canHarvest
                     && u.getPlayer() == player
@@ -87,8 +88,8 @@ public class Myrts extends AbstractionLayerAI {
                 meleeUnitBehavior(u, p, gs);
             }
         }
-
-        // behavior of workers:
+        System.out.println("test2");
+        // 所有的worker，所以会比较复杂
         List<Unit> workers = new LinkedList<Unit>();
         for (Unit u : pgs.getUnits()) {
             if (u.getType().canHarvest
@@ -97,16 +98,26 @@ public class Myrts extends AbstractionLayerAI {
             }
         }
         workersBehavior(workers, p, gs);
-
+        System.out.println("test3");
+        /*
+        for (Unit u : pgs.getUnits()) {
+            if (resourse==false
+                    &&u.getType().canHarvest
+                    && u.getPlayer() == player) {
+                meleeUnitBehavior(u, p, gs);
+            }
+        }
+        */
         return translateActions(player, gs);
     }
 
     public void baseBehavior(Unit u, Player p, PhysicalGameState pgs) {
+        //生产worker
         if (p.getResources() >= workerType.cost) {
             train(u, workerType);
         }
     }
-
+    
     public void meleeUnitBehavior(Unit u, Player p, GameState gs) {
         PhysicalGameState pgs = gs.getPhysicalGameState();
         Unit closestEnemy = null;
@@ -118,6 +129,7 @@ public class Myrts extends AbstractionLayerAI {
             if (u2.getPlayer() >= 0 && u2.getPlayer() != p.getID()) {
                 int d = Math.abs(u2.getX() - u.getX()) + Math.abs(u2.getY() - u.getY());
                 if (closestEnemy == null || d < closestDistance) {
+                    //这里是获取距离最近的敌人
                     closestEnemy = u2;
                     closestDistance = d;
                 }
@@ -126,6 +138,7 @@ public class Myrts extends AbstractionLayerAI {
             }
         }
         if (closestEnemy != null) {
+            //攻击距离最近的敌人
             attack(u, closestEnemy);
         } else {
             attack(u, null);
@@ -137,14 +150,15 @@ public class Myrts extends AbstractionLayerAI {
         PhysicalGameState pgs = gs.getPhysicalGameState();
         int nbases = 0;
         int resourcesUsed = 0;
+        //消耗数初始化为0
         Unit harvestWorker = null;
         List<Unit> freeWorkers = new LinkedList<Unit>();
         freeWorkers.addAll(workers);
-
+        //一次check，可以减少计算量
         if (workers.isEmpty()) {
             return;
         }
-
+        //对base进行check
         for (Unit u2 : pgs.getUnits()) {
             if (u2.getType() == baseType
                     && u2.getPlayer() == p.getID()) {
@@ -155,17 +169,20 @@ public class Myrts extends AbstractionLayerAI {
         List<Integer> reservedPositions = new LinkedList<Integer>();
         if (nbases == 0 && !freeWorkers.isEmpty() && resourse) {
             // build a base:
+            //判断资源数大于base单位的消耗和本回合之前的消耗数之和
             if (p.getResources() >= baseType.cost + resourcesUsed) {
                 Unit u = freeWorkers.remove(0);
+                //去除第一个worker去建造base
                 buildIfNotAlreadyBuilding(u, baseType, u.getX(), u.getY(), reservedPositions, p, pgs);
                 resourcesUsed += baseType.cost;
             }
         }
-
+        //再去除一个worker去进行采集
         if (freeWorkers.size() > 0 && resourse) {
             harvestWorker = freeWorkers.remove(0);
         }
-        // harvest with the harvest worker:
+        
+        // 用于采集的worker行为，harvest为采集
         if (harvestWorker != null) {
             Unit closestBase = null;
             Unit closestResource = null;
@@ -181,6 +198,7 @@ public class Myrts extends AbstractionLayerAI {
             }
             closestDistance = 0;
             for (Unit u2 : pgs.getUnits()) {
+                //判断是否是仓库
                 if (u2.getType().isStockpile && u2.getPlayer() == p.getID()) {
                     int d = Math.abs(u2.getX() - harvestWorker.getX()) + Math.abs(u2.getY() - harvestWorker.getY());
                     if (closestBase == null || d < closestDistance) {
@@ -189,9 +207,12 @@ public class Myrts extends AbstractionLayerAI {
                     }
                 }
             }
-            if (closestResource != null && closestBase != null) {
+            
+            if (closestResource!=null&&closestBase != null) {
                 AbstractAction aa = getAbstractAction(harvestWorker);
+                //将可攻击的worker抽象化为aa
                 if (aa instanceof Harvest) {
+                    //判断aa是否是harvest类型
                     Harvest h_aa = (Harvest) aa;
                     if (h_aa.getTarget() != closestResource || h_aa.getBase() != closestBase) {
                         harvest(harvestWorker, closestResource, closestBase);
@@ -200,12 +221,14 @@ public class Myrts extends AbstractionLayerAI {
                 } else {
                     harvest(harvestWorker, closestResource, closestBase);
                 }
-            } else if ((closestResource == null) && (p.getResources() == 0) && (freeWorkers.isEmpty())) {
-
+                // && (freeWorkers.isEmpty())
+            } else if (p.getResources() == 0) {
                 freeWorkers.add(harvestWorker);
                 resourse = false;
+                System.out.println("freeworker:"+freeWorkers.size());
             }
         }
+        //将空闲的worker派出进行攻击
         for (Unit u : freeWorkers) {
             meleeUnitBehavior(u, p, gs);
         }

@@ -9,6 +9,7 @@ import myrts.Myrts;
 import ai.core.AI;
 import ai.*;
 import ai.abstraction.WorkerRush;
+import ai.abstraction.WorkerRushPlusPlus;
 import ai.abstraction.pathfinding.BFSPathFinding;
 import ai.mcts.naivemcts.NaiveMCTS;
 import ai.scv.SCV;
@@ -33,11 +34,11 @@ public class GameVisualSimulationTest {
 
         GameState gs = new GameState(pgs, utt);
         int MAXCYCLES = 5000;
-        int PERIOD = 20;
+        int PERIOD = 10;
         boolean gameover = false;
         
         AI ai1 = new Myrts(utt);        
-        AI ai2 = new Example(utt);
+        AI ai2 = new WorkerRushPlusPlus(utt);
 
         JFrame w = PhysicalGameStatePanel.newVisualizer(gs,640,640,false,PhysicalGameStatePanel.COLORSCHEME_BLACK);
 //        JFrame w = PhysicalGameStatePanel.newVisualizer(gs,640,640,false,PhysicalGameStatePanel.COLORSCHEME_WHITE);
