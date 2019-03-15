@@ -7,7 +7,7 @@ package myrts;
 import ai.abstraction.AbstractAction;
 import ai.abstraction.AbstractionLayerAI;
 import ai.abstraction.Harvest;
-import ai.abstraction.pathfinding.AStarPathFinding;
+import ai.abstraction.pathfinding.BFSPathFinding;
 import ai.abstraction.pathfinding.PathFinding;
 import ai.core.AI;
 import ai.core.ParameterSpecification;
@@ -27,6 +27,7 @@ import rts.units.UnitTypeTable;
 public class Myrts extends AbstractionLayerAI {
 
     Random r = new Random();
+    Unit res; 
     protected UnitTypeTable utt;
     UnitType workerType;
     UnitType baseType;
@@ -39,7 +40,7 @@ public class Myrts extends AbstractionLayerAI {
     // If we have a base: train workers non-stop
     // If we have a worker: do this if needed: build base, harvest resources
     public Myrts(UnitTypeTable a_utt) {
-        this(a_utt, new AStarPathFinding());
+        this(a_utt, new BFSPathFinding());
     }
 
     public Myrts(UnitTypeTable a_utt, PathFinding a_pf) {
@@ -69,7 +70,22 @@ public class Myrts extends AbstractionLayerAI {
         Player p = gs.getPlayer(player);
         PlayerAction pa = new PlayerAction();
 //        System.out.println("LightRushAI for player " + player + " (cycle " + gs.getTime() + ")");
-
+        System.out.println("start");
+        
+        
+        
+        
+        //添加了一点check
+        if(p.getResources()==0){
+            for (Unit u : pgs.getUnits()) {
+                if (u.getType().canAttack
+                        && u.getPlayer() == player
+                        && gs.getActionAssignment(u) == null) {
+                    meleeUnitBehavior(u, p, gs);
+                }
+            }
+            return translateActions(player, gs);
+        }
         // behavior of bases:
         for (Unit u : pgs.getUnits()) {
             if (u.getType() == baseType
@@ -78,9 +94,9 @@ public class Myrts extends AbstractionLayerAI {
                 baseBehavior(u, p, pgs);
             }
         }
-        System.out.println("test1");
+        
         // behavior of melee units:
-        //可攻击但不可采集资源，在整个比赛中不存在
+        //可攻击但不可采集资源，通过workerbehavior调用
         for (Unit u : pgs.getUnits()) {
             if (u.getType().canAttack && !u.getType().canHarvest
                     && u.getPlayer() == player
@@ -88,7 +104,7 @@ public class Myrts extends AbstractionLayerAI {
                 meleeUnitBehavior(u, p, gs);
             }
         }
-        System.out.println("test2");
+        
         // 所有的worker，所以会比较复杂
         List<Unit> workers = new LinkedList<Unit>();
         for (Unit u : pgs.getUnits()) {
@@ -98,7 +114,8 @@ public class Myrts extends AbstractionLayerAI {
             }
         }
         workersBehavior(workers, p, gs);
-        System.out.println("test3");
+        System.out.println("resourse: "+resourse);
+        System.out.println("base resourse"+p.getResources());
         /*
         for (Unit u : pgs.getUnits()) {
             if (resourse==false
@@ -183,12 +200,14 @@ public class Myrts extends AbstractionLayerAI {
         }
         
         // 用于采集的worker行为，harvest为采集
+        Unit closestResource = null;
         if (harvestWorker != null) {
             Unit closestBase = null;
-            Unit closestResource = null;
+            
             int closestDistance = 0;
             for (Unit u2 : pgs.getUnits()) {
                 if (u2.getType().isResource) {
+                    res=u2;
                     int d = Math.abs(u2.getX() - harvestWorker.getX()) + Math.abs(u2.getY() - harvestWorker.getY());
                     if (closestResource == null || d < closestDistance) {
                         closestResource = u2;
@@ -208,7 +227,7 @@ public class Myrts extends AbstractionLayerAI {
                 }
             }
             
-            if (closestResource!=null&&closestBase != null) {
+            if (closestBase != null&&closestResource != null) {
                 AbstractAction aa = getAbstractAction(harvestWorker);
                 //将可攻击的worker抽象化为aa
                 if (aa instanceof Harvest) {
@@ -216,18 +235,42 @@ public class Myrts extends AbstractionLayerAI {
                     Harvest h_aa = (Harvest) aa;
                     if (h_aa.getTarget() != closestResource || h_aa.getBase() != closestBase) {
                         harvest(harvestWorker, closestResource, closestBase);
-                    } else {
+                    } 
+                    else {
+                        //此else用于占位
                     }
-                } else {
+                } 
+                else {
                     harvest(harvestWorker, closestResource, closestBase);
                 }
                 // && (freeWorkers.isEmpty())
-            } else if (p.getResources() == 0) {
-                freeWorkers.add(harvestWorker);
-                resourse = false;
-                System.out.println("freeworker:"+freeWorkers.size());
+            } 
+            else if (closestResource == null) {
+                //freeWorkers.add(harvestWorker);
+                harvest(harvestWorker,closestBase,closestBase);
+                System.out.println("test");
+            }
+            
+        }
+        
+        
+        /*
+        //下面解决resourse何时为false，，，未完成
+        int flag1=0;
+        int flag2=0;
+        for (Unit u3 : pgs.getUnits()) { 
+            if(u3.getType().isResource)
+                flag2=1;
+            
+            if(u3.getType()==workerType&&u3.getResources() != 0)
+            {
+                flag1 = 1;
             }
         }
+        if(closestResource == null&&closestResource == null&&flag1==0&&flag2==0)
+            resourse=false;
+        */
+        
         //将空闲的worker派出进行攻击
         for (Unit u : freeWorkers) {
             meleeUnitBehavior(u, p, gs);
@@ -239,7 +282,7 @@ public class Myrts extends AbstractionLayerAI {
     public List<ParameterSpecification> getParameters() {
         List<ParameterSpecification> parameters = new ArrayList<>();
 
-        parameters.add(new ParameterSpecification("PathFinding", PathFinding.class, new AStarPathFinding()));
+        parameters.add(new ParameterSpecification("PathFinding", PathFinding.class, new BFSPathFinding()));
 
         return parameters;
     }

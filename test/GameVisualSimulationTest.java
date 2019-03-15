@@ -4,12 +4,14 @@
  */
 package test;
 
+
 import example.Example;
 import myrts.Myrts;
 import ai.core.AI;
 import ai.*;
 import ai.abstraction.WorkerRush;
 import ai.abstraction.WorkerRushPlusPlus;
+import ai.abstraction.WorkerDefense;
 import ai.abstraction.pathfinding.BFSPathFinding;
 import ai.mcts.naivemcts.NaiveMCTS;
 import ai.scv.SCV;
@@ -37,9 +39,14 @@ public class GameVisualSimulationTest {
         int PERIOD = 10;
         boolean gameover = false;
         
+        
+           
         AI ai1 = new Myrts(utt);        
         AI ai2 = new WorkerRushPlusPlus(utt);
-
+        //AI ai2 = new WorkerDefense(utt);
+        //AI ai2 = new WorkerRush(utt);
+        
+        
         JFrame w = PhysicalGameStatePanel.newVisualizer(gs,640,640,false,PhysicalGameStatePanel.COLORSCHEME_BLACK);
 //        JFrame w = PhysicalGameStatePanel.newVisualizer(gs,640,640,false,PhysicalGameStatePanel.COLORSCHEME_WHITE);
 
